@@ -2,6 +2,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
+const { resolvePublicApiBaseUrl } = require('../helpers/publicApiBaseUrl');
 
 const router = express.Router();
 
@@ -10,10 +11,13 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // % fee para tarjeta
 const CARD_FEE_PCT = Number(process.env.CARD_FEE_PCT ?? '3');
 const FEE_RATE = Number.isFinite(CARD_FEE_PCT) ? CARD_FEE_PCT / 100 : 0;
-const API_BASE_URL = process.env.API_BASE_URL;
 
-async function quoteShippingThroughSelf({ token, cartId, shipping }) {
-  const res = await fetch(`${API_BASE_URL}/shipping/quote`, {
+async function quoteShippingThroughSelf({ req, token, cartId, shipping }) {
+  const base = resolvePublicApiBaseUrl(req);
+  if (!base) {
+    return { ok: false, status: 500, data: { ok: false, message: 'API base URL not configured (set API_BASE_URL or run on Vercel)' } };
+  }
+  const res = await fetch(`${base}/shipping/quote`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -190,6 +194,7 @@ router.post('/start-direct', ensureAuth, async (req, res) => {
 
     // 4) Cotizar envío usando el endpoint central (respeta transport = 'sea' | 'air')
     const quote = await quoteShippingThroughSelf({
+      req,
       token: req.headers['authorization'],
       cartId,
       shipping, // ← incluye transport cuando country === 'CU'

@@ -6,8 +6,8 @@ const authenticateToken = require('../middleware/authenticateToken');
 const { sale } = require('../services/bmspaySale');
 const { sendCustomerOrderEmail, sendOwnerOrderEmail } = require('../helpers/emailOrders');
 const { getThreeDSCreds } = require('../services/bmspay3ds');
+const { resolvePublicApiBaseUrl } = require('../helpers/publicApiBaseUrl');
 
-const API_BASE_URL = process.env.API_BASE_URL;
 const THREE_DS_ENABLED =
   (process.env.BMS_3DS_ENABLED ?? 'true').toLowerCase() !== 'false';
 
@@ -190,8 +190,12 @@ function marginPctFromProduct(pMeta) {
   return 0;
 }
 
-async function quoteShippingThroughSelf({ token, cartId, shipping }) {
-  const res = await fetch(`${API_BASE_URL}/shipping/quote`, {
+async function quoteShippingThroughSelf({ req, token, cartId, shipping }) {
+  const base = resolvePublicApiBaseUrl(req);
+  if (!base) {
+    return { ok: false, status: 500, data: { ok: false, message: 'API base URL not configured (set API_BASE_URL or run on Vercel)' } };
+  }
+  const res = await fetch(`${base}/shipping/quote`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -450,7 +454,7 @@ router.post('/bmspay/sale', authenticateToken, async (req, res) => {
       ? { country: 'CU', province: shipping.province, municipality: shipping.municipality, area_type: shipping.area_type, ...(transport ? { transport } : {}), }
       : { country: 'US', state: shipping.state, city: shipping.city, zip: shipping.zip };
 
-    const quote = await quoteShippingThroughSelf({ token: authHeader, cartId: s.cart_id, shipping: shipPayload });
+    const quote = await quoteShippingThroughSelf({ req, token: authHeader, cartId: s.cart_id, shipping: shipPayload });
     if (!quote.ok || !quote.data) {
       return res.status(409).json({ ok: false, message: 'No se pudo cotizar el envío' });
     }

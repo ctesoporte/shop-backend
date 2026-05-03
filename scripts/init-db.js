@@ -6,14 +6,31 @@ const { Client } = require('pg')
 
 const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 
+// Para DDL/migraciones usamos la conexión directa (no el pooler de transacciones).
+const rawConnectionString =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.POSTGRES_URL
+
+// Aceptar el cert self-signed de Supabase sin desactivar TLS.
+const connectionString = rawConnectionString
+  ? rawConnectionString.replace(/sslmode=require/g, 'sslmode=no-verify')
+  : rawConnectionString
+
   ; (async () => {
+    if (!connectionString) {
+      console.error('❌ Falta DATABASE_URL / POSTGRES_URL_NON_POOLING / POSTGRES_URL en .env')
+      process.exit(1)
+    }
+
     const client = new Client({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       ssl:
-        process.env.POSTGRES_SSL === 'true' ||
-          /render\.com|sslmode=require/.test(process.env.DATABASE_URL || '')
-          ? { rejectUnauthorized: false }
-          : undefined,
+        process.env.POSTGRES_SSL === 'false'
+          ? false
+          : /supabase\.(co|com)|render\.com|sslmode=(require|no-verify)/.test(connectionString)
+            ? { rejectUnauthorized: false }
+            : undefined,
     })
 
     try {
