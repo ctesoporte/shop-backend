@@ -77,15 +77,22 @@ const corsOptions = {
 app.use(cors(corsOptions))
 app.use((req, res, next) => (req.method === 'OPTIONS' ? res.sendStatus(204) : next()))
 
-// Archivos estáticos y uploads
-for (const dir of ['img', 'cats']) {
+// En serverless (Vercel) el filesystem es read-only fuera de /tmp, así que
+// solo intentamos crear directorios cuando estamos en un servidor tradicional.
+const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+
+const ensureDir = (dir) => {
+  if (isServerless) return
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
+
+for (const dir of ['img', 'cats']) ensureDir(dir)
 app.use('/img', express.static('img'))
 app.use('/cats', express.static('cats'))
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads')
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+  || (isServerless ? '/tmp/uploads' : path.join(process.cwd(), 'uploads'))
+ensureDir(UPLOAD_DIR)
 app.use('/uploads', express.static(UPLOAD_DIR, {
   setHeaders: (res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -152,5 +159,11 @@ app.use('/encargos', encargosRouter)
 app.use('/encargos', encargosCheckoutRoutes)
 app.use('/payments-direct', paymentsDirectEncargos)
 
-const PORT_FINAL = process.env.PORT || 4000
-app.listen(PORT_FINAL, () => console.log(`Servidor escuchando en el puerto ${PORT_FINAL}`))
+// En Vercel exportamos el `app` y NO llamamos a listen(); Vercel envuelve
+// la app como una serverless function. Solo escuchamos en local/servidor.
+if (!isServerless) {
+  const PORT_FINAL = process.env.PORT || 4000
+  app.listen(PORT_FINAL, () => console.log(`Servidor escuchando en el puerto ${PORT_FINAL}`))
+}
+
+module.exports = app

@@ -1,0 +1,8 @@
+node_modules
+.git
+.env
+.env.*
+uploads
+*.log
+index_legacy.js
+README.md
