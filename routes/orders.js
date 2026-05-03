@@ -1,7 +1,15 @@
 const express = require('express')
 const router = express.Router()
 const { pool } = require('../db')
-const { fileTypeFromBuffer } = require('file-type')
+
+// `file-type` v17+ es ESM-only; lo cargamos con dynamic import desde CJS.
+// Cacheamos la promesa para no re-importar en cada request.
+let _fileTypePromise
+const fileTypeFromBuffer = async (buf) => {
+  if (!_fileTypePromise) _fileTypePromise = import('file-type')
+  const mod = await _fileTypePromise
+  return mod.fileTypeFromBuffer(buf)
+}
 const authenticateToken = require('../middleware/authenticateToken')
 const { requireAdmin, isAdminUser, getUserRoleAndOwnerId, requirePartnerOrAdmin } = require('../middleware/roles')
 
